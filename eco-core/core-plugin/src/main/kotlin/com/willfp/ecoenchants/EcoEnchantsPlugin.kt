@@ -16,6 +16,7 @@ import com.willfp.ecoenchants.enchants.impl.EnchantmentPermanenceCurse
 import com.willfp.ecoenchants.enchants.impl.EnchantmentRapid
 import com.willfp.ecoenchants.enchants.impl.EnchantmentRepairing
 import com.willfp.ecoenchants.enchants.impl.EnchantmentReplenish
+import com.willfp.ecoenchants.enchants.impl.EnchantmentSoulbound
 import com.willfp.ecoenchants.enchants.impl.EnchantmentTelekinesis
 import com.willfp.ecoenchants.enchants.registerVanillaEnchants
 import com.willfp.ecoenchants.integrations.EnchantRegistrations
@@ -39,22 +40,15 @@ class EcoEnchantsPlugin : LibReforgePlugin() {
 
     init {
         instance = this
+        copyConfigs("enchants")
         EcoEnchants.update(this)
     }
 
     override fun handleEnableAdditional() {
-        copyConfigs("enchants")
         registerHolderProvider { it.heldEnchantLevels }
     }
 
     override fun handleReloadAdditional() {
-        // Load hardcoded enchantments
-        EnchantmentTelekinesis(this)
-        EnchantmentPermanenceCurse(this)
-        EnchantmentRepairing(this)
-        EnchantmentRapid(this)
-        EnchantmentReplenish(this)
-
         registerVanillaEnchants(this)
 
         logger.info(EcoEnchants.values().size.toString() + " Enchants Loaded")
