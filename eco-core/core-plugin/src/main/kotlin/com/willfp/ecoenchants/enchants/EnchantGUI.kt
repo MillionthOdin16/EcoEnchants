@@ -3,10 +3,12 @@ package com.willfp.ecoenchants.enchants
 import com.github.benmanes.caffeine.cache.Caffeine
 import com.willfp.eco.core.config.updating.ConfigUpdater
 import com.willfp.eco.core.drops.DropQueue
+import com.willfp.eco.core.fast.fast
 import com.willfp.eco.core.gui.GUIComponent
 import com.willfp.eco.core.gui.menu
 import com.willfp.eco.core.gui.menu.Menu
 import com.willfp.eco.core.gui.menu.MenuLayer
+import com.willfp.eco.core.gui.page.Page
 import com.willfp.eco.core.gui.page.PageChanger
 import com.willfp.eco.core.gui.slot
 import com.willfp.eco.core.gui.slot.ConfigSlot
@@ -24,6 +26,7 @@ import com.willfp.ecoenchants.display.EnchantSorter.sortForDisplay
 import com.willfp.ecoenchants.display.getFormattedName
 import com.willfp.ecoenchants.target.EnchantmentTargets.applicableEnchantments
 import org.apache.commons.lang.WordUtils
+import org.bukkit.ChatColor
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
@@ -72,10 +75,20 @@ object EnchantGUI {
 
             onRender { player, menu ->
                 val atCaptive = menu.getCaptiveItem(player, captiveRow, captiveColumn)
-                if (atCaptive.isEmpty || atCaptive == null) {
-                    menu.addState(player, "enchants", emptyList<EcoEnchant>())
+                if (atCaptive.isEmpty || atCaptive == null || atCaptive.type == Material.BOOK) {
+                    menu.addState(player, "enchants", EcoEnchants.values().sortForDisplay())
                 } else {
-                    menu.addState(player, "enchants", atCaptive.applicableEnchantments.sortForDisplay())
+                    menu.addState(
+                        player,
+                        "enchants",
+                        atCaptive.applicableEnchantments.sortForDisplay()
+                            .subtract(atCaptive.fast().enchants.keys)
+                            .toList()
+                    )
+                }
+
+                if (menu.getPage(player) > menu.getMaxPage(player)) {
+                    menu.addState(player, Page.PAGE_KEY, 1)
                 }
             }
 
@@ -105,11 +118,13 @@ object EnchantGUI {
                 val enchants = menu.getState<List<EcoEnchant>>(player, "enchants") ?: emptyList()
                 val total = enchants.size
                 val perPage = pane.size
-                if (total == 0) {
-                    1
+
+                val pages = if (total == 0) {
+                    0
                 } else {
                     ceil(total.toDouble() / perPage).toInt()
                 }
+                pages
             }
 
             onClose { event, menu ->
@@ -142,7 +157,6 @@ object EnchantGUI {
                 setSlot(
                     plugin.configYml.getInt("enchantinfo.item.row"),
                     plugin.configYml.getInt("enchantinfo.item.column"),
-
                     enchant.getInformationSlot(plugin)
                 )
 
@@ -168,16 +182,18 @@ object EnchantGUI {
 private class EnchantmentScrollPane(
     private val plugin: EcoEnchantsPlugin
 ) : GUIComponent {
+    private val defaultSlot = slot(Items.lookup(plugin.configYml.getString("enchant-gui.empty-item")))
+
     override fun getSlotAt(row: Int, column: Int, player: Player, menu: Menu): Slot? {
         val index = column + ((row - 1) * columns) - 1
         val page = menu.getPage(player)
 
-        val enchants = menu.getState<List<EcoEnchant>>(player, "enchants") ?: return null
+        val enchants = menu.getState<List<EcoEnchant>>(player, "enchants") ?: return defaultSlot
         if (enchants.isEmpty()) {
-            return null
+            return defaultSlot
         }
 
-        val enchant = enchants.getOrNull(index + size * (page - 1)) ?: return null
+        val enchant = enchants.getOrNull(index + size * (page - 1)) ?: return defaultSlot
 
         return enchant.getInformationSlot(plugin)
     }
@@ -208,30 +224,48 @@ private fun EcoEnchant.getInformationSlot(plugin: EcoEnchantsPlugin): Slot {
                     1
                 )
                 .addLoreLines {
+                    // This is horrific and I should refactor it.
+                    val wrappableMap = mutableMapOf<String, String>()
+
+                    fun String.toWrappable(): String {
+                        val unspaced = this.replace(" ", "{_}")
+                        val uncolored = ChatColor.stripColor(unspaced)!!
+
+                        wrappableMap[uncolored] = this
+                        return uncolored
+                    }
+
+                    fun String.replaceInWrappable(): String {
+                        var processed = this
+                        for ((wrappable, original) in wrappableMap) {
+                            processed = processed.replace(wrappable, original)
+                        }
+                        return processed
+                    }
+
                     plugin.configYml.getStrings("enchantinfo.item.lore")
                         .map {
                             it.replace("%max_level%", enchant.maxLevel.toString())
-                                .replace("%rarity%", enchant.enchantmentRarity.displayName)
+                                .replace("%rarity%", enchant.enchantmentRarity.displayName.toWrappable())
                                 .replace(
                                     "%targets%",
-                                    enchant.targets.joinToString(", ") { target -> target.displayName }
+                                    enchant.targets.joinToString(", ") { target -> target.displayName.toWrappable() }
                                 )
                                 .replace(
                                     "%conflicts%",
                                     if (enchant.conflictsWithEverything) {
-                                        plugin.langYml.getFormattedString("all-conflicts")
+                                        plugin.langYml.getFormattedString("all-conflicts").toWrappable()
                                     } else {
                                         enchant.conflicts.joinToString(", ") { conflict ->
-                                            // Jank to prevent line-wrap on long enchantment names
-                                            conflict.wrap().getFormattedName(0).replace(" ", "{_}")
-                                        }.ifEmpty { plugin.langYml.getFormattedString("no-conflicts") }
+                                            conflict.wrap().getFormattedName(0).toWrappable()
+                                        }.ifEmpty { plugin.langYml.getFormattedString("no-conflicts").toWrappable() }
                                     }
                                 )
                         }
                         .flatMap {
-                            WordUtils.wrap(it, 40, "\n", false)
+                            WordUtils.wrap(it, 45, "\n", false)
                                 .lines()
-                                .map { s -> s.replace("{_}", " ") }
+                                .map { s -> s.replaceInWrappable() }
                                 .mapIndexed { index, s ->
                                     if (index == 0) s
                                     else StringUtils.format(

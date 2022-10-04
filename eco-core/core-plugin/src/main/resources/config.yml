@@ -68,7 +68,7 @@ display:
   descriptions:
     enabled: true # If enchantment descriptions should be shown in lore
     threshold: 5 # Above this amount, enchantment descriptions will not be shown
-    word-wrap: 32 # Number of characters to have on each line
+    word-wrap: 36 # Number of characters to have on each line
     format: "&8"
 
   require-enchantable: true # If EcoEnchants should not display on non-enchantable items.
@@ -113,6 +113,9 @@ enchant-gui:
       - "100000001"
       - "100000001"
       - "111111111"
+
+  # Empty item to show when there is no enchanted book
+  empty-item: gray_stained_glass_pane name:""
 
   # Options for the info item
   info:
