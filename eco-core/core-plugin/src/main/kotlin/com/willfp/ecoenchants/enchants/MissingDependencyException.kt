@@ -11,7 +11,7 @@ class MissingDependencyException(
 // Plugin names mapped to enchants not installed.
 private val prompts = mutableMapOf<String, Int>()
 
-fun addPluginPrompt(plugin: EcoEnchantsPlugin, plugins: MutableList<String>) {
+fun addPluginPrompt(plugin: EcoEnchantsPlugin, plugins: List<String>) {
     if (!plugin.isLoaded) {
         return
     }
@@ -24,8 +24,8 @@ fun addPluginPrompt(plugin: EcoEnchantsPlugin, plugins: MutableList<String>) {
 fun sendPrompts(plugin: EcoEnchantsPlugin) {
     for ((pl, amount) in prompts) {
         plugin.logger.apply {
-            warning("$amount enchantments were not loaded because they need $pl to be installed")
-            warning("Either download $pl or delete the folder with their names (/plugins/EcoEnchants/enchants/) to remove this message!")
+            warning("$amount enchantments were not loaded because they need $pl to be installed!")
+            warning("Either download $pl or delete the folder at /plugins/EcoEnchants/enchants/${pl.lowercase()} to remove this message")
         }
     }
 
